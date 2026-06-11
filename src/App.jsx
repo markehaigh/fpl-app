@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 // ------------------------------------------------------------------
 // FPL Companion — clickable prototype with realistic mock data.
@@ -729,6 +730,7 @@ export default function App() {
           </>
         )}
       </div>
+      <SpeedInsights />
     </div>
   );
 }
