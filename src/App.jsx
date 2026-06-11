@@ -192,18 +192,79 @@ const Chip = ({ children, color = T.dim }) => (
   </span>
 );
 
-const Player = ({ p, small }) => (
+// Club kit colours: body, contrasting sleeves, or vertical stripes.
+const KITS = {
+  ARS: { body: "#EF0107", sleeve: "#F8F8F8" },
+  AVL: { body: "#67223D", sleeve: "#95BFE5" },
+  BHA: { body: "#0057B8", stripe: "#F8F8F8" },
+  BOU: { body: "#DA291C", stripe: "#1A1A1A" },
+  BRE: { body: "#E30613", stripe: "#F8F8F8" },
+  BUR: { body: "#6C1D45", sleeve: "#99D6EA" },
+  CHE: { body: "#034694" },
+  CRY: { body: "#1B458F", stripe: "#C4122E" },
+  EVE: { body: "#003399" },
+  FUL: { body: "#F4F4F4", sleeve: "#1A1A1A" },
+  LEE: { body: "#F4F4F4", sleeve: "#1D428A" },
+  LIV: { body: "#C8102E" },
+  MCI: { body: "#6CABDD" },
+  MUN: { body: "#DA291C", sleeve: "#1A1A1A" },
+  NEW: { body: "#1A1A1A", stripe: "#F8F8F8" },
+  NFO: { body: "#DD0000" },
+  SUN: { body: "#EB172B", stripe: "#F8F8F8" },
+  TOT: { body: "#F4F4F4", sleeve: "#132257" },
+  WHU: { body: "#7A263A", sleeve: "#1BB1E7" },
+  WOL: { body: "#FDB913" },
+};
+
+const shirtBackground = (club) => {
+  const kit = KITS[club] || { body: "#C9D3CD" };
+  const layers = [];
+  if (kit.sleeve) {
+    layers.push(
+      `linear-gradient(90deg, ${kit.sleeve} 0 13%, rgba(0,0,0,0) 13% 87%, ${kit.sleeve} 87% 100%)`
+    );
+  }
+  layers.push(
+    kit.stripe
+      ? `repeating-linear-gradient(90deg, ${kit.body} 0 5px, ${kit.stripe} 5px 10px)`
+      : `linear-gradient(180deg, ${kit.body}, ${kit.body})`
+  );
+  return layers.join(", ");
+};
+
+function Player({ p, small }) {
+  const [imgOk, setImgOk] = useState(true);
+  const useImg = p.code && imgOk;
+  return (
   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: small ? 64 : 72 }}>
     <div
       style={{
         position: "relative",
         width: small ? 34 : 40,
         height: small ? 38 : 44,
-        background: "linear-gradient(180deg,#F6F8F7 0%,#DCE5E0 100%)",
-        clipPath: "polygon(20% 0, 80% 0, 100% 22%, 88% 30%, 88% 100%, 12% 100%, 12% 30%, 0 22%)",
         marginBottom: 4,
       }}
     >
+      {useImg ? (
+        <img
+          src={`https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${p.code}${p.pos === "GK" ? "_1" : ""}-66.png`}
+          alt={`${p.club} shirt`}
+          onError={() => setImgOk(false)}
+          style={{
+            width: "100%", height: "100%", objectFit: "contain",
+            filter: "drop-shadow(0 2px 2px rgba(0,20,5,0.45))",
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            width: "100%", height: "100%",
+            background: shirtBackground(p.club),
+            clipPath: "polygon(20% 0, 80% 0, 100% 22%, 88% 30%, 88% 100%, 12% 100%, 12% 30%, 0 22%)",
+            filter: "drop-shadow(0 2px 2px rgba(0,20,5,0.45))",
+          }}
+        />
+      )}
       {p.cap && (
         <div
           style={{
@@ -234,7 +295,8 @@ const Player = ({ p, small }) => (
       {p.pts != null ? `${p.cap ? p.pts * 2 : p.pts} pts` : p.club}
     </div>
   </div>
-);
+  );
+}
 
 const Row = ({ players }) => (
   <div style={{ display: "flex", justifyContent: "space-evenly", width: "100%" }}>
@@ -380,24 +442,78 @@ function Transfers({ manager }) {
   );
 }
 
-function Stats() {
+function Stats({ players }) {
+  const [q, setQ] = useState("");
+  const [club, setClub] = useState("All");
+  const [pos, setPos] = useState("All");
+
+  const all = players?.length ? players : topPlayers;
+  const clubs = ["All", ...[...new Set(all.map((p) => p.club))].sort()];
+  const positions = ["All", "GK", "DEF", "MID", "FWD"];
+
+  const filtered = all.filter(
+    (p) =>
+      (club === "All" || p.club === club) &&
+      (pos === "All" || p.pos === pos) &&
+      p.n.toLowerCase().includes(q.toLowerCase())
+  );
+  const shown = filtered.slice(0, 50);
+
+  const selectStyle = {
+    background: T.surface, color: T.text, border: `1px solid ${T.line}`,
+    borderRadius: 8, padding: "8px 10px", fontSize: 13, fontFamily: "inherit", flex: 1,
+  };
+
   return (
-    <div style={{ background: T.surface, border: `1px solid ${T.line}`, borderRadius: 14, overflow: "hidden" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr 0.7fr", padding: "10px 14px", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: T.dim, borderBottom: `1px solid ${T.line}` }}>
-        <div>Player</div><div>Price</div><div>Sel.</div><div>Form</div><div>Pts</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search any player…"
+        aria-label="Search players"
+        style={{
+          background: T.surface, border: `1px solid ${T.line}`, borderRadius: 10,
+          padding: "11px 14px", color: T.text, fontSize: 14, fontFamily: "inherit",
+        }}
+      />
+      <div style={{ display: "flex", gap: 8 }}>
+        <select value={club} onChange={(e) => setClub(e.target.value)} aria-label="Filter by club" style={selectStyle}>
+          {clubs.map((c) => (
+            <option key={c} value={c}>{c === "All" ? "All clubs" : c}</option>
+          ))}
+        </select>
+        <select value={pos} onChange={(e) => setPos(e.target.value)} aria-label="Filter by position" style={selectStyle}>
+          {positions.map((p) => (
+            <option key={p} value={p}>{p === "All" ? "All positions" : p}</option>
+          ))}
+        </select>
       </div>
-      {topPlayers.map((p) => (
-        <div key={p.n} style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr 0.7fr", padding: "11px 14px", fontSize: 13, borderBottom: `1px solid ${T.line}`, alignItems: "center" }}>
-          <div>
-            <div style={{ fontWeight: 700 }}>{p.n}</div>
-            <div style={{ fontSize: 11, color: T.dim }}>{p.club} · {p.pos}</div>
-          </div>
-          <div>£{p.price}m</div>
-          <div style={{ color: T.dim }}>{p.sel}</div>
-          <div style={{ color: p.form >= 6.5 ? T.buy : T.text }}>{p.form}</div>
-          <div style={{ fontWeight: 700, color: T.gold }}>{p.total}</div>
+
+      <div style={{ background: T.surface, border: `1px solid ${T.line}`, borderRadius: 14, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr 0.7fr", padding: "10px 14px", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: T.dim, borderBottom: `1px solid ${T.line}` }}>
+          <div>Player</div><div>Price</div><div>Sel.</div><div>Form</div><div>Pts</div>
         </div>
-      ))}
+        {shown.length === 0 && (
+          <div style={{ padding: 18, fontSize: 13, color: T.dim, textAlign: "center" }}>
+            No players match — try a different spelling or clear the filters.
+          </div>
+        )}
+        {shown.map((p) => (
+          <div key={`${p.n}-${p.club}`} style={{ display: "grid", gridTemplateColumns: "1.6fr 0.7fr 0.7fr 0.7fr 0.7fr", padding: "11px 14px", fontSize: 13, borderBottom: `1px solid ${T.line}`, alignItems: "center" }}>
+            <div>
+              <div style={{ fontWeight: 700 }}>{p.n}</div>
+              <div style={{ fontSize: 11, color: T.dim }}>{p.club} · {p.pos}</div>
+            </div>
+            <div>£{p.price}m</div>
+            <div style={{ color: T.dim }}>{p.sel}</div>
+            <div style={{ color: p.form >= 6.5 ? T.buy : T.text }}>{p.form}</div>
+            <div style={{ fontWeight: 700, color: T.gold }}>{p.total}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: T.dim, textAlign: "center" }}>
+        Showing {shown.length} of {filtered.length} players, sorted by total points.
+      </div>
     </div>
   );
 }
@@ -475,17 +591,19 @@ function PriceRow({ p, dir }) {
   );
 }
 
-function Prices() {
+function Prices({ prices }) {
+  const risers = prices?.risers?.length ? prices.risers : priceRisers;
+  const fallers = prices?.fallers?.length ? prices.fallers : priceFallers;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ fontSize: 11, color: T.dim }}>
-        Prices move when enough managers transfer a player in or out. The bar shows how close each player is to a change — 95%+ usually moves at the overnight update.
+        Prices move when enough managers transfer a player in or out. The bar is an estimate of how close each player is to a change, based on {prices ? "today's real transfer numbers" : "transfer numbers"} — 95%+ usually moves at the overnight update.
       </div>
       <div style={{ background: T.surface, border: `1px solid ${T.line}`, borderRadius: 14, overflow: "hidden" }}>
         <div style={{ padding: "10px 14px", fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", color: T.buy, borderBottom: `1px solid ${T.line}`, fontWeight: 700 }}>
           ▲ Predicted risers
         </div>
-        {priceRisers.map((p) => (
+        {risers.map((p) => (
           <PriceRow key={p.n} p={p} dir="up" />
         ))}
       </div>
@@ -493,7 +611,7 @@ function Prices() {
         <div style={{ padding: "10px 14px", fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", color: T.sell, borderBottom: `1px solid ${T.line}`, fontWeight: 700 }}>
           ▼ Predicted fallers
         </div>
-        {priceFallers.map((p) => (
+        {fallers.map((p) => (
           <PriceRow key={p.n} p={p} dir="down" />
         ))}
       </div>
@@ -508,17 +626,20 @@ function Fixtures() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ fontSize: 11, color: T.dim, marginBottom: 2 }}>
-        Next three fixtures · darker red = harder. CAPS = home.
+        Next three fixtures · (H) home, (A) away · darker red = harder.
       </div>
       {fixtures.map((f) => (
         <div key={f.club} style={{ display: "flex", alignItems: "center", gap: 10, background: T.surface, border: `1px solid ${T.line}`, borderRadius: 12, padding: "10px 14px" }}>
           <div style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 18, fontWeight: 700, width: 52 }}>{f.club}</div>
           <div style={{ display: "flex", gap: 6, flex: 1 }}>
-            {f.run.map(([opp, d], i) => (
-              <div key={i} style={{ flex: 1, textAlign: "center", background: fdrColor(d), color: "#fff", borderRadius: 6, padding: "6px 0", fontSize: 12, fontWeight: 700 }}>
-                {opp}
-              </div>
-            ))}
+            {f.run.map(([opp, d], i) => {
+              const home = opp === opp.toUpperCase();
+              return (
+                <div key={i} style={{ flex: 1, textAlign: "center", background: fdrColor(d), color: "#fff", borderRadius: 6, padding: "6px 0", fontSize: 12, fontWeight: 700 }}>
+                  {opp.toUpperCase()} ({home ? "H" : "A"})
+                </div>
+              );
+            })}
           </div>
         </div>
       ))}
@@ -561,6 +682,7 @@ async function fetchLiveTeam(id) {
 
   const byId = Object.fromEntries(boot.elements.map((e) => [e.id, e]));
   const clubShort = Object.fromEntries(boot.teams.map((t) => [t.id, t.short_name]));
+  const clubCode = Object.fromEntries(boot.teams.map((t) => [t.id, t.code]));
   const posName = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
 
   const liveSquad = { GK: [], DEF: [], MID: [], FWD: [] };
@@ -571,6 +693,7 @@ async function fetchLiveTeam(id) {
     const player = {
       n: el.web_name,
       club: clubShort[el.team],
+      code: clubCode[el.team],
       price: el.now_cost / 10,
       pts: el.event_points,
       form: parseFloat(el.form),
@@ -582,6 +705,49 @@ async function fetchLiveTeam(id) {
   });
 
   const h = picksData.entry_history;
+
+  // --- Price change predictions from real transfer numbers ---
+  // FPL's exact thresholds are secret; this estimates progress from
+  // net transfers today scaled by how widely owned the player is.
+  const myIds = new Set(picksData.picks.map((p) => p.element));
+  const mkPriceRow = (el, net) => {
+    const ownPct = parseFloat(el.selected_by_percent) || 0.1;
+    const threshold = 30000 + ownPct * 4500;
+    return {
+      n: el.web_name,
+      club: clubShort[el.team],
+      price: el.now_cost / 10,
+      net: (net > 0 ? "+" : "−") + Math.abs(net).toLocaleString(),
+      progress: Math.min(100, Math.round((Math.abs(net) / threshold) * 100)),
+      owned: myIds.has(el.id),
+    };
+  };
+  const withNet = boot.elements
+    .map((el) => ({ el, net: el.transfers_in_event - el.transfers_out_event }));
+  const risers = withNet
+    .filter((x) => x.net > 0)
+    .sort((a, b) => b.net - a.net)
+    .slice(0, 6)
+    .map((x) => mkPriceRow(x.el, x.net));
+  const fallers = withNet
+    .filter((x) => x.net < 0)
+    .sort((a, b) => a.net - b.net)
+    .slice(0, 6)
+    .map((x) => mkPriceRow(x.el, x.net));
+
+  // --- Every player in the game, for the searchable Stats tab ---
+  const allPlayers = boot.elements
+    .map((el) => ({
+      n: el.web_name,
+      club: clubShort[el.team],
+      pos: posName[el.element_type],
+      price: el.now_cost / 10,
+      sel: el.selected_by_percent + "%",
+      form: parseFloat(el.form) || 0,
+      total: el.total_points,
+    }))
+    .sort((a, b) => b.total - a.total);
+
   return {
     manager: {
       teamName: entry.name,
@@ -595,6 +761,8 @@ async function fetchLiveTeam(id) {
     },
     squad: liveSquad,
     bench: liveBench,
+    prices: { risers, fallers },
+    players: allPlayers,
   };
 }
 
@@ -625,8 +793,8 @@ export default function App() {
   const tabs = {
     Team: <PitchView squad={team.squad} bench={team.bench} />,
     Transfers: <Transfers manager={team.manager} />,
-    Prices: <Prices />,
-    Stats: <Stats />,
+    Prices: <Prices prices={team.prices} />,
+    Stats: <Stats players={team.players} />,
     Fixtures: <Fixtures />,
   };
 
