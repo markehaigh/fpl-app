@@ -232,11 +232,20 @@ const shirtBackground = (club) => {
   return layers.join(", ");
 };
 
-function Player({ p, small }) {
-  const [imgOk, setImgOk] = useState(true);
-  const useImg = p.code && imgOk;
+function Player({ p, small, onClick }) {
+  // Official FPL kit images: try .webp first, then .png, then our colour shirt.
+  const [imgIdx, setImgIdx] = useState(0);
+  const base = p.code
+    ? `https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${p.code}${p.pos === "GK" ? "_1" : ""}`
+    : null;
+  const candidates = base ? [`${base}-66.webp`, `${base}-66.png`] : [];
+  const src = candidates[imgIdx];
   return (
-  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: small ? 64 : 72 }}>
+  <div
+    onClick={onClick}
+    role={onClick ? "button" : undefined}
+    style={{ display: "flex", flexDirection: "column", alignItems: "center", width: small ? 64 : 72, cursor: onClick ? "pointer" : "default" }}
+  >
     <div
       style={{
         position: "relative",
@@ -245,11 +254,11 @@ function Player({ p, small }) {
         marginBottom: 4,
       }}
     >
-      {useImg ? (
+      {src ? (
         <img
-          src={`https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${p.code}${p.pos === "GK" ? "_1" : ""}-66.png`}
+          src={src}
           alt={`${p.club} shirt`}
-          onError={() => setImgOk(false)}
+          onError={() => setImgIdx(imgIdx + 1)}
           style={{
             width: "100%", height: "100%", objectFit: "contain",
             filter: "drop-shadow(0 2px 2px rgba(0,20,5,0.45))",
@@ -298,17 +307,136 @@ function Player({ p, small }) {
   );
 }
 
-const Row = ({ players }) => (
+const Row = ({ players, pos, onPick }) => (
   <div style={{ display: "flex", justifyContent: "space-evenly", width: "100%" }}>
     {players.map((p) => (
-      <Player key={p.n} p={p} />
+      <Player key={p.n} p={p} onClick={onPick ? () => onPick(p, pos, "squad") : undefined} />
     ))}
   </div>
 );
 
-function PitchView({ squad, bench }) {
+function PitchView({ squad, bench, bank, freeTransfers, players }) {
+  const [sq, setSq] = useState(squad);
+  const [bn, setBn] = useState(bench);
+  const [bankLeft, setBankLeft] = useState(bank);
+  const [moves, setMoves] = useState([]);
+  const [picking, setPicking] = useState(null); // { p, pos, from }
+  const [q, setQ] = useState("");
+
+  const pool = players?.length ? players : topPlayers;
+  const inTeam = new Set([...Object.values(sq).flat(), ...bn].map((x) => x.n + x.club));
+
+  const startPick = (p, pos, from) => {
+    setPicking({ p, pos, from });
+    setQ("");
+  };
+
+  const candidates = picking
+    ? pool
+        .filter(
+          (c) =>
+            c.pos === picking.pos &&
+            !inTeam.has(c.n + c.club) &&
+            c.price <= +(bankLeft + picking.p.price).toFixed(1) &&
+            c.n.toLowerCase().includes(q.toLowerCase())
+        )
+        .slice(0, 25)
+    : [];
+
+  const applyPick = (inP) => {
+    const { p: outP, pos, from } = picking;
+    const newP = { ...inP, pts: null, cap: false, pos };
+    if (from === "bench") setBn(bn.map((x) => (x.n === outP.n ? newP : x)));
+    else setSq({ ...sq, [pos]: sq[pos].map((x) => (x.n === outP.n ? newP : x)) });
+    setBankLeft(+(bankLeft + outP.price - inP.price).toFixed(1));
+    setMoves([...moves, { out: outP.n, in: inP.n }]);
+    setPicking(null);
+  };
+
+  const reset = () => {
+    setSq(squad);
+    setBn(bench);
+    setBankLeft(bank);
+    setMoves([]);
+    setPicking(null);
+  };
+
+  const hit = Math.max(0, moves.length - freeTransfers) * 4;
+
   return (
     <div>
+      <div style={{ fontSize: 11, color: T.dim, marginBottom: 10, textAlign: "center" }}>
+        Tap any player to plan a transfer — experiment freely, nothing is final.
+      </div>
+
+      {moves.length > 0 && (
+        <div style={{ background: T.surface, border: `1px solid ${T.gold}55`, borderRadius: 12, padding: "10px 14px", marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 17, fontWeight: 700 }}>
+              Planned: {moves.length} transfer{moves.length > 1 ? "s" : ""}
+            </span>
+            <button
+              onClick={reset}
+              style={{ background: "transparent", color: T.sell, border: `1px solid ${T.sell}66`, borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+            >
+              Reset
+            </button>
+          </div>
+          <div style={{ fontSize: 12, color: T.dim }}>
+            {moves.map((m) => `${m.out} → ${m.in}`).join(" · ")}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <Chip color={T.gold}>£{bankLeft.toFixed(1)}m left</Chip>
+            <Chip color={hit > 0 ? T.sell : T.buy}>{hit > 0 ? `−${hit} pts hit` : "Within free transfers"}</Chip>
+          </div>
+        </div>
+      )}
+
+      {picking && (
+        <div style={{ background: T.surface, border: `1px solid ${T.buy}55`, borderRadius: 12, padding: 14, marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 17, fontWeight: 700 }}>
+              Replace {picking.p.n} ({picking.pos})
+            </span>
+            <button
+              onClick={() => setPicking(null)}
+              style={{ background: "transparent", color: T.dim, border: `1px solid ${T.line}`, borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+            >
+              Cancel
+            </button>
+          </div>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={`Search ${picking.pos}s up to £${(bankLeft + picking.p.price).toFixed(1)}m…`}
+            aria-label="Search replacements"
+            style={{ width: "100%", boxSizing: "border-box", background: T.bg, border: `1px solid ${T.line}`, borderRadius: 9, padding: "10px 12px", color: T.text, fontSize: 14, fontFamily: "inherit", marginBottom: 8 }}
+          />
+          <div style={{ maxHeight: 240, overflowY: "auto" }}>
+            {candidates.length === 0 && (
+              <div style={{ fontSize: 12, color: T.dim, padding: 10, textAlign: "center" }}>
+                No affordable {picking.pos}s match that search.
+              </div>
+            )}
+            {candidates.map((c) => (
+              <button
+                key={c.n + c.club}
+                onClick={() => applyPick(c)}
+                style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", background: "transparent", border: "none", borderBottom: `1px solid ${T.line}`, padding: "9px 4px", cursor: "pointer", color: T.text, fontFamily: "inherit", textAlign: "left" }}
+              >
+                <span>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>{c.n}</span>
+                  <span style={{ fontSize: 11, color: T.dim }}> {c.club}</span>
+                </span>
+                <span style={{ fontSize: 12 }}>
+                  £{c.price}m · <span style={{ color: T.gold, fontWeight: 700 }}>{c.total} pts</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div
         style={{
           borderRadius: 14,
@@ -354,10 +482,10 @@ function PitchView({ squad, bench }) {
             <path d="M 374 12 A 14 14 0 0 0 388 26" />
           </g>
         </svg>
-        <Row players={squad.GK} />
-        <Row players={squad.DEF} />
-        <Row players={squad.MID} />
-        <Row players={squad.FWD} />
+        <Row players={sq.GK} pos="GK" onPick={startPick} />
+        <Row players={sq.DEF} pos="DEF" onPick={startPick} />
+        <Row players={sq.MID} pos="MID" onPick={startPick} />
+        <Row players={sq.FWD} pos="FWD" onPick={startPick} />
       </div>
 
       <div style={{ marginTop: 14 }}>
@@ -370,8 +498,8 @@ function PitchView({ squad, bench }) {
             border: `1px solid ${T.line}`, borderRadius: 12, padding: "12px 4px",
           }}
         >
-          {bench.map((p) => (
-            <Player key={p.n} p={p} small />
+          {bn.map((p) => (
+            <Player key={p.n} p={p} small onClick={() => startPick(p, p.pos, "bench")} />
           ))}
         </div>
       </div>
@@ -740,6 +868,7 @@ async function fetchLiveTeam(id) {
     .map((el) => ({
       n: el.web_name,
       club: clubShort[el.team],
+      code: clubCode[el.team],
       pos: posName[el.element_type],
       price: el.now_cost / 10,
       sel: el.selected_by_percent + "%",
@@ -791,7 +920,16 @@ export default function App() {
   };
 
   const tabs = {
-    Team: <PitchView squad={team.squad} bench={team.bench} />,
+    Team: (
+      <PitchView
+        key={team.manager.teamName + team.manager.rank}
+        squad={team.squad}
+        bench={team.bench}
+        bank={team.manager.bank}
+        freeTransfers={team.manager.freeTransfers}
+        players={team.players}
+      />
+    ),
     Transfers: <Transfers manager={team.manager} />,
     Prices: <Prices prices={team.prices} />,
     Stats: <Stats players={team.players} />,
