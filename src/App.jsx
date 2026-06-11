@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Analytics } from "@vercel/analytics/react";
 
 // ------------------------------------------------------------------
 // FPL Companion — clickable prototype with realistic mock data.
@@ -729,6 +730,7 @@ export default function App() {
           </>
         )}
       </div>
+      <Analytics />
     </div>
   );
 }
